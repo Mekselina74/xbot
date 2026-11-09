@@ -1,0 +1,52 @@
+name: X News Auto Poster
+
+on:
+  schedule:
+    # Her 3 saatte bir çalışır (UTC saatine göre)
+    - cron: '0 */3 * * *'
+  # GitHub arayüzünden istediğiniz zaman "Run workflow" butonuyla elle tetikleyebilirsiniz
+  workflow_dispatch:
+    inputs:
+      category:
+        description: 'Öncelikli Kategori (tech, sports, general)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  tweet:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Depoyu Klonla
+        uses: actions/checkout@v4
+
+      - name: Python 3.12 Kur
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Bağımlılıkları Yükle
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Haberi Seç ve Tweet At
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TWITTER_COOKIES: ${{ secrets.TWITTER_COOKIES }}
+        run: |
+          if [ -n "${{ github.event.inputs.category }}" ]; then
+            python main.py --category "${{ github.event.inputs.category }}"
+          else
+            python main.py
+          fi
+
+      - name: Geçmişi (history.json) Güncelle ve Kaydet
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-update history.json after tweet [skip ci]"
+          file_pattern: 'history.json'
