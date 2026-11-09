@@ -36,7 +36,7 @@ from config import RSS_SOURCES
 from rss_fetcher import fetch_candidate_news, load_history, save_history
 from ai_curator import select_and_craft_tweet, generate_viral_quote_comment
 from twitter_client import async_post_tweet
-from twitter_trends import fetch_viral_turkish_tweets
+from twitter_trends import fetch_viral_turkish_tweets, fetch_user_tweets
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -48,6 +48,8 @@ ALLOWED_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 PENDING_DRAFTS = {}     # {draft_id: {type: 'news'|'viral', text: ..., url: ..., ...}}
 USER_STATES = {}        # {chat_id: {draft_id: ..., mode: 'quote'|'news'}}
 CUSTOM_COMMENTS = {}    # {draft_id: user_comment_text}
+SEEN_VIRAL_IDS = set()  # Kullanıcıya gösterilen ve "Başka Bul" denilen tweetler
+SEEN_NEWS_URLS = set()  # Kullanıcıya gösterilen ve "Başka Bul" denilen haberler
 
 
 def check_auth(update: Update) -> bool:
@@ -58,6 +60,74 @@ def check_auth(update: Update) -> bool:
     return chat_id == str(ALLOWED_CHAT_ID)
 
 
+async def send_special_account_draft(chat_id: int, context: ContextTypes.DEFAULT_TYPE, screen_name="turkce_dusun"):
+    """Özel takip edilen hesabın (@turkce_dusun) son tweetlerini alıp alıntılama taslağı sunar."""
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"🌟 @{screen_name} hesabının son paylaşımları taranıyor..."
+    )
+
+    try:
+        tweets = await fetch_user_tweets(screen_name=screen_name, limit=6)
+        available = [tw for tw in tweets if tw["id"] not in SEEN_VIRAL_IDS]
+        if not available and tweets:
+            SEEN_VIRAL_IDS.clear()
+            available = tweets
+
+        if not available:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"⚠️ @{screen_name} hesabından yeni tweet bulunamadı."
+            )
+            return
+
+        selected_tw = available[0]
+        SEEN_VIRAL_IDS.add(selected_tw["id"])
+
+        curation = generate_viral_quote_comment(selected_tw)
+        draft_id = str(uuid.uuid4())[:8]
+
+        PENDING_DRAFTS[draft_id] = {
+            "type": "viral",
+            "suggested_comment": curation["suggested_comment"],
+            "url": selected_tw["url"],
+            "author_username": selected_tw["author_username"],
+            "author_name": selected_tw["author_name"],
+            "text": selected_tw["text"],
+            "topic": selected_tw["topic"],
+            "likes": selected_tw["likes"],
+            "retweets": selected_tw["retweets"],
+        }
+
+        message_text = (
+            f"🌟 **@{selected_tw['author_username']} ({selected_tw['author_name']}) Paylaşımı:**\n\n"
+            f"\"{selected_tw['text']}\"\n\n"
+            f"❤️ {selected_tw['likes']} Beğeni | 🔁 {selected_tw['retweets']} Retweet\n"
+            f"🔗 {selected_tw['url']}\n\n"
+            f"🤖 **Gemini'ın Önerdiği Alıntı Yorumu:**\n"
+            f"\"{curation['suggested_comment']}\""
+        )
+
+        keyboard = [
+            [InlineKeyboardButton("✅ Önerilen Yorumla Alıntıla", callback_data=f"quote_sug_{draft_id}")],
+            [InlineKeyboardButton("✍️ Kendi Yorumumu Yazıp Alıntıla", callback_data=f"quote_custom_{draft_id}")],
+            [
+                InlineKeyboardButton("🔄 Başka Tweetini Getir", callback_data=f"another_friend_{screen_name}"),
+                InlineKeyboardButton("❌ Pas Geç", callback_data=f"skip_{draft_id}")
+            ]
+        ]
+
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=message_text,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    except Exception as e:
+        logging.error(f"Özel hesap taslak hatası: {e}")
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Hata: {str(e)[:200]}")
+
+
 async def send_viral_draft(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     """X Türkiye canlı trendlerinden viral bir tweet bulur ve alıntı taslağı sunar."""
     await context.bot.send_message(
@@ -66,16 +136,23 @@ async def send_viral_draft(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        virals = await fetch_viral_turkish_tweets(limit=6)
-        if not virals:
+        virals = await fetch_viral_turkish_tweets(limit=15)
+        # Daha önce kullanıcıya gösterilmiş olanları filtrele
+        available = [tw for tw in virals if tw["id"] not in SEEN_VIRAL_IDS]
+        if not available and virals:
+            SEEN_VIRAL_IDS.clear()
+            available = virals
+
+        if not available:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text="⚠️ Şu an taranan trendlerde uygun viral tweet bulunamadı. Lütfen az sonra tekrar deneyin."
             )
             return
 
-        # İlk uygun viral tweeti seç
-        selected_tw = virals[0]
+        # Listeden yeni olan ilk tweeti seç ve görüldü olarak işaretle
+        selected_tw = available[0]
+        SEEN_VIRAL_IDS.add(selected_tw["id"])
         curation = generate_viral_quote_comment(selected_tw)
         draft_id = str(uuid.uuid4())[:8]
 
@@ -133,11 +210,18 @@ async def send_news_draft(chat_id: int, context: ContextTypes.DEFAULT_TYPE, cate
         if not candidates and category:
             candidates = fetch_candidate_news(category=None)
 
-        if not candidates:
+        # Kullanıcıya daha önce gösterilmiş haberleri filtrele
+        available = [c for c in candidates if c["link"] not in SEEN_NEWS_URLS]
+        if not available and candidates:
+            SEEN_NEWS_URLS.clear()
+            available = candidates
+
+        if not available:
             await context.bot.send_message(chat_id=chat_id, text="⚠️ Paylaşılacak yeni haber bulunamadı.")
             return
 
-        curation = select_and_craft_tweet(candidates, preferred_category=category)
+        curation = select_and_craft_tweet(available, preferred_category=category)
+        SEEN_NEWS_URLS.add(curation["link"])
         draft_id = str(uuid.uuid4())[:8]
 
         PENDING_DRAFTS[draft_id] = {
@@ -295,6 +379,11 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text("🔄 Başka bir viral içerik aranıyor...")
         await send_viral_draft(chat_id, context)
 
+    elif data.startswith("another_friend_"):
+        sn = data.replace("another_friend_", "")
+        await query.edit_message_text(f"🔄 @{sn} hesabından başka tweet aranıyor...")
+        await send_special_account_draft(chat_id, context, screen_name=sn)
+
     elif data.startswith("another_news_"):
         cat = data.replace("another_news_", "")
         cat_arg = None if cat == "all" else cat
@@ -394,7 +483,9 @@ async def router_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cmd = update.message.text.lower()
     chat_id = update.effective_chat.id
 
-    if "viral" in cmd or "trend" in cmd:
+    if "turkce" in cmd or "arkadas" in cmd or "dusun" in cmd:
+        await send_special_account_draft(chat_id, context, screen_name="turkce_dusun")
+    elif "viral" in cmd or "trend" in cmd:
         await send_viral_draft(chat_id, context)
     elif "tekno" in cmd:
         await send_news_draft(chat_id, context, category="tech")
@@ -408,14 +499,16 @@ async def router_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def scheduled_job(context: ContextTypes.DEFAULT_TYPE):
-    """Her 3 saatte bir dönüşümlü olarak viral veya haber gönderir."""
+    """Her 3 saatte bir dönüşümlü olarak viral, haber veya özel hesap paylaşımı gönderir."""
     if ALLOWED_CHAT_ID:
         import random
-        # %50 Viral X Türkiye, %50 Küresel Haber
-        if random.random() < 0.5:
+        r = random.random()
+        if r < 0.40:
             await send_viral_draft(int(ALLOWED_CHAT_ID), context)
-        else:
+        elif r < 0.75:
             await send_news_draft(int(ALLOWED_CHAT_ID), context)
+        else:
+            await send_special_account_draft(int(ALLOWED_CHAT_ID), context, screen_name="turkce_dusun")
 
 
 def main():
@@ -427,6 +520,7 @@ def main():
     # Komutlar
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler(["viral", "trend"], router_command))
+    app.add_handler(CommandHandler(["turkcedusun", "arkadas"], router_command))
     app.add_handler(CommandHandler(["yeni", "haber", "teknoloji", "spor", "gundem"], router_command))
 
     # Buton tıklamaları

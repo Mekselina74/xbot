@@ -27,6 +27,11 @@ RSS_SOURCES = {
     ]
 }
 
+# Takip Edilecek Özel Hesaplar (Arkadaş / Kaliteli İçerik Üretenler)
+SPECIAL_ACCOUNTS = [
+    "turkce_dusun"
+]
+
 # Gemini Model Ayarları
 GEMINI_MODEL = "gemini-3.1-flash-lite"
 
