@@ -1,77 +1,39 @@
-# 🤖 X (Twitter) Otomatik Haber Küratörü
+# 🤖 X (Twitter) Akıllı Haber ve Viral Alıntılama Botu
 
-7/24 bulutta (GitHub Actions üzerinde) veya yerel bilgisayarınızda çalışabilen, teknoloji, spor ve popüler dünya haberlerini RSS kaynaklarından toplayıp **Google Gemini AI** ile analiz eden ve dikkat çekici Türkçe tweetler olarak paylaşan otomatik bot.
-
----
-
-## 🌟 Özellikler
-
-- **%100 Ücretsiz:** X Developer Portal ücretli API paketine ihtiyaç duymaz; oturum çerezleri (`cookies.json`) üzerinden çalışır.
-- **7/24 Bulut Desteği:** GitHub Actions sayesinde bilgisayarınız kapalıyken bile belirli aralıklarla (örneğin 3 saatte bir) otomatik tweet atar.
-- **Çoklu Kategori & Akıllı Dağılım:**
-  - 🚀 **Teknoloji & Yapay Zekâ** (The Verge, TechCrunch, Ars Technica, Engadget)
-  - ⚽ **Spor & Küresel Gelişmeler** (BBC Sport, ESPN, Sky Sports)
-  - 🌍 **Popüler Gündem & Keşifler** (BBC World, The Guardian)
-- **Gemini AI Editörü:** Haberleri tarafsız ve akıcı bir Türkçe ile ilgi çekici sosyal medya metinlerine dönüştürür, uygun hashtagler ve kaynak linki ekler.
-- **Tekrar Önleme (`history.json`):** Daha önce paylaşılan haberler kaydedilir ve asla iki kez paylaşılmaz.
+Telegram üzerinden onaylı veya tam otomatik çalışabilen; teknoloji, spor, küresel haberler ve **X Türkiye canlı gündemindeki viral tweetleri** toplayıp Gemini AI ile analiz eden ve **Alıntı Tweet (Quote Tweet)** olarak paylaşan asistan.
 
 ---
 
-## 📁 Proje Dosya Yapısı
+## 🌟 Öne Çıkan Özellikler
 
-```
-x-news-bot/
-├── .github/workflows/
-│   └── tweet_scheduler.yml  # GitHub Actions 7/24 zamanlayıcı
-├── .env.example             # Örnek ortam değişkenleri
-├── .gitignore
-├── ai_curator.py            # Gemini AI ile haber seçimi ve tweet yazımı
-├── config.py                # RSS kaynakları, modeller ve ayarlar
-├── history.json             # Paylaşılmış haberlerin listesi
-├── login_helper.py          # Bir defalık X giriş ve cookies.json üretici
-├── main.py                  # Ana çalıştırıcı (Haber çek -> Gemini -> Tweet)
-├── requirements.txt         # Bağımlılıklar
-├── rss_fetcher.py           # RSS toplayıcı ve HTML temizleyici
-└── twitter_client.py        # Twikit tabanlı X paylaşım istemcisi
-```
+1. **X Türkiye Canlı Trendleri & Viral Tweetler:**
+   - X'in Türkiye gündemindeki (Trend Topic) en çok konuşulan, komik, ilginç ve tepki çeken tweetlerini anlık yakalar.
+2. **Alıntı Tweet (Quote Tweet) Desteği:**
+   - Bot bulduğu popüler tweetin linkini alır; siz tek tıkla zekice alıntılayarak takipçilerinizle paylaşırsınız.
+3. **Kendi Yorumunuzu Yazma Özgürlüğü:**
+   - Bot malzemeyi önünüze getirir. İster Gemini'ın önerdiği esprili yorumu seçin, ister **[✍️ Kendi Yorumumu Yaz]** butonuna basıp Telegram'a kendi cümlenizi yazın!
+4. **Haber Bülteni (RSS & Gemini):**
+   - The Verge, TechCrunch, BBC Sport, ESPN, Sky Sports ve The Guardian kaynaklarından en taze haberleri çeker ve 230 karakterlik vurucu tweetler üretir.
+5. **%100 Ücretsiz:**
+   - X API ücreti gerektirmez; oturum çerezleri (`cookies.json`) ve TLS impersonation ile çalışır.
 
 ---
 
-## 🚀 Kurulum ve İlk Çalıştırma
+## 📱 Telegram Komutları
 
-### 1. Gemini API Anahtarı
-1. [Google AI Studio](https://aistudio.google.com/app/apikey) adresinden ücretsiz API anahtarınızı alın.
-2. `x-news-bot` klasörü içinde `.env` dosyası oluşturup ekleyin:
-   ```env
-   GEMINI_API_KEY=AIzaSy...
-   ```
+Botunuzla Telegram üzerinden konuşurken şu komutları kullanabilirsiniz:
 
-### 2. Tek Seferlik X Girişi (cookies.json)
-Bilgisayarınızda terminalden şu komutu çalıştırın:
-```bash
-python login_helper.py
-```
-Kullanıcı adı, e-posta ve şifrenizi girin. Başarılı girişten sonra klasörde `cookies.json` dosyası oluşacaktır.
-
-### 3. Test Çalıştırması (Dry Run)
-Tweet atmadan botun nasıl çalıştığını görmek için:
-```bash
-python main.py --dry-run
-```
-
-Gerçek bir tweet paylaşımı denemek için:
-```bash
-python main.py
-```
+- **`/viral`** veya **`/trend`** ➔ X Türkiye'de o an gündem olan viral bir tweeti bulur ve alıntı taslağı sunar.
+- **`/haber`** veya **`/yeni`** ➔ Güncel küresel haberlerden bir tweet taslağı üretir.
+- **`/teknoloji`** ➔ Sadece teknoloji / yapay zekâ haberi getirir.
+- **`/spor`** ➔ Sadece spor haberi getirir.
+- **`/gundem`** ➔ Dünya gündemi haberi getirir.
 
 ---
 
-## ☁️ 7/24 Buluta Taşıma (GitHub Actions)
+## 🔘 Taslak Butonları ve İşlevleri
 
-1. GitHub'da **Private (Gizli)** bir repo oluşturun.
-2. Kodları bu depoya yükleyin (Not: `cookies.json` ve `.env` dosyası gitignore'dadır, asla kodla yüklenmez).
-3. GitHub reponuzda **Settings > Secrets and variables > Actions** sayfasına gidin.
-4. **New repository secret** butonuna tıklayarak şu 2 sırrı ekleyin:
-   - **`GEMINI_API_KEY`**: Google AI Studio anahtarınız.
-   - **`TWITTER_COOKIES`**: Bilgisayarınızda oluşan `cookies.json` dosyasının tüm metin içeriği (Not Defteri ile açıp kopyalayın).
-5. Artık her şey hazır! `.github/workflows/tweet_scheduler.yml` her 3 saatte bir otomatik olarak çalışacak ve bilgisayarınız kapalı olsa bile tweet atacaktır.
+- **`[✅ Önerilen Yorumla Alıntıla]`** ➔ Gemini'ın yazdığı esprili/dikkat çekici yorumla tweeti hemen alıntılar.
+- **`[✍️ Kendi Yorumumu Yazıp Alıntıla]`** ➔ Bot sizden yorum bekler; Telegram'a yazdığınız cümleyi alıp alıntı tweet olarak paylaşır.
+- **`[🔄 Başka Viral Bul]`** ➔ Gündemdeki bir sonraki popüler tweeti getirir.
+- **`[❌ Pas Geç]`** ➔ O içeriği arşive atar ve bir daha sormaz.
