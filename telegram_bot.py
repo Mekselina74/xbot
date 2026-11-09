@@ -128,15 +128,16 @@ async def send_special_account_draft(chat_id: int, context: ContextTypes.DEFAULT
         await context.bot.send_message(chat_id=chat_id, text=f"❌ Hata: {str(e)[:200]}")
 
 
-async def send_viral_draft(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
-    """X Türkiye canlı trendlerinden viral bir tweet bulur ve alıntı taslağı sunar."""
+async def send_viral_draft(chat_id: int, context: ContextTypes.DEFAULT_TYPE, category=None):
+    """X Türkiye canlı trendlerinden veya belirli bir kategoriden (spor, haber, mizah, tekno) viral tweet bulur."""
+    cat_label = f"Viral {category.upper()}" if category else "X Türkiye Canlı Gündemi"
     await context.bot.send_message(
         chat_id=chat_id,
-        text="🔥 X Türkiye canlı gündemi ve viral tweetler taranıyor..."
+        text=f"🔥 {cat_label} taranıyor, viral içerikler toplanıyor..."
     )
 
     try:
-        virals = await fetch_viral_turkish_tweets(limit=15)
+        virals = await fetch_viral_turkish_tweets(category=category, limit=15)
         # Daha önce kullanıcıya gösterilmiş olanları filtrele
         available = [tw for tw in virals if tw["id"] not in SEEN_VIRAL_IDS]
         if not available and virals:
@@ -146,7 +147,7 @@ async def send_viral_draft(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
         if not available:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="⚠️ Şu an taranan trendlerde uygun viral tweet bulunamadı. Lütfen az sonra tekrar deneyin."
+                text=f"⚠️ {cat_label} alanında uygun yeni viral tweet bulunamadı."
             )
             return
 
@@ -166,10 +167,11 @@ async def send_viral_draft(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
             "topic": selected_tw["topic"],
             "likes": selected_tw["likes"],
             "retweets": selected_tw["retweets"],
+            "category": category
         }
 
         message_text = (
-            f"🔥 **X Türkiye Gündemi:** {selected_tw['topic']}\n\n"
+            f"🔥 **{selected_tw['topic']}**\n\n"
             f"👤 **@{selected_tw['author_username']} ({selected_tw['author_name']}):**\n"
             f"\"{selected_tw['text']}\"\n\n"
             f"❤️ {selected_tw['likes']} Beğeni | 🔁 {selected_tw['retweets']} Retweet\n"
@@ -182,7 +184,7 @@ async def send_viral_draft(chat_id: int, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("✅ Önerilen Yorumla Alıntıla", callback_data=f"quote_sug_{draft_id}")],
             [InlineKeyboardButton("✍️ Kendi Yorumumu Yazıp Alıntıla", callback_data=f"quote_custom_{draft_id}")],
             [
-                InlineKeyboardButton("🔄 Başka Viral Bul", callback_data="another_viral"),
+                InlineKeyboardButton("🔄 Başka Viral Bul", callback_data=f"another_viral_{category or 'all'}"),
                 InlineKeyboardButton("❌ Pas Geç", callback_data=f"skip_{draft_id}")
             ]
         ]
@@ -375,9 +377,17 @@ async def handle_button_click(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text("❌ Bu içerik pas geçildi.")
 
     # 6. Başka Viral / Haber
-    elif data == "another_viral":
-        await query.edit_message_text("🔄 Başka bir viral içerik aranıyor...")
-        await send_viral_draft(chat_id, context)
+    elif data.startswith("another_viral"):
+        cat = data.replace("another_viral_", "").replace("another_viral", "")
+        cat_arg = None if (not cat or cat == "all") else cat
+        await query.edit_message_text(f"🔄 {'Viral ' + cat_arg.upper() if cat_arg else 'Viral'} içerik aranıyor...")
+        await send_viral_draft(chat_id, context, category=cat_arg)
+
+    elif data.startswith("menu_viral_"):
+        cat = data.replace("menu_viral_", "")
+        cat_arg = None if cat == "all" else cat
+        await query.edit_message_text(f"🎯 {'Viral ' + cat_arg.upper() if cat_arg else 'Genel Gündem'} taranıyor...")
+        await send_viral_draft(chat_id, context, category=cat_arg)
 
     elif data.startswith("another_friend_"):
         sn = data.replace("another_friend_", "")
@@ -475,6 +485,34 @@ async def handle_user_text_message(update: Update, context: ContextTypes.DEFAULT
     )
 
 
+async def category_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Kullanıcıya tek tıkla kategori seçebileceği buton menüsü sunar."""
+    if not check_auth(update):
+        return
+
+    text = (
+        "🎯 Hangi alanda içerik/viral aramak istersiniz?\n\n"
+        "Aşağıdaki butonlara dokunarak o kategorideki en popüler paylaşımları anında getirebilirsiniz:"
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton("⚽ Viral Spor", callback_data="menu_viral_spor"),
+            InlineKeyboardButton("📰 Viral Gündem/Haber", callback_data="menu_viral_haber")
+        ],
+        [
+            InlineKeyboardButton("😂 Viral Mizah/Komik", callback_data="menu_viral_mizah"),
+            InlineKeyboardButton("🚀 Viral Teknoloji/AI", callback_data="menu_viral_tekno")
+        ],
+        [
+            InlineKeyboardButton("🌟 @turkce_dusun", callback_data="another_friend_turkce_dusun"),
+            InlineKeyboardButton("🎲 Canlı Trendler (Genel)", callback_data="menu_viral_all")
+        ]
+    ]
+
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
 async def router_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Kullanıcı komutlarını yönlendirir."""
     if not check_auth(update):
@@ -483,10 +521,22 @@ async def router_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cmd = update.message.text.lower()
     chat_id = update.effective_chat.id
 
-    if "turkce" in cmd or "arkadas" in cmd or "dusun" in cmd:
+    if "menu" in cmd or "kategori" in cmd:
+        await category_menu_command(update, context)
+    elif "turkce" in cmd or "arkadas" in cmd or "dusun" in cmd:
         await send_special_account_draft(chat_id, context, screen_name="turkce_dusun")
     elif "viral" in cmd or "trend" in cmd:
-        await send_viral_draft(chat_id, context)
+        # Kategori parametresi kontrolü: /viral spor, /viral haber, /viral mizah, /viral tekno
+        cat = None
+        if "spor" in cmd:
+            cat = "spor"
+        elif "haber" in cmd or "gundem" in cmd:
+            cat = "haber"
+        elif "mizah" in cmd or "komik" in cmd:
+            cat = "mizah"
+        elif "tekno" in cmd or "ai" in cmd:
+            cat = "tekno"
+        await send_viral_draft(chat_id, context, category=cat)
     elif "tekno" in cmd:
         await send_news_draft(chat_id, context, category="tech")
     elif "spor" in cmd:
@@ -519,6 +569,7 @@ def main():
 
     # Komutlar
     app.add_handler(CommandHandler("start", start_command))
+    app.add_handler(CommandHandler(["menu", "kategori"], category_menu_command))
     app.add_handler(CommandHandler(["viral", "trend"], router_command))
     app.add_handler(CommandHandler(["turkcedusun", "arkadas"], router_command))
     app.add_handler(CommandHandler(["yeni", "haber", "teknoloji", "spor", "gundem"], router_command))
