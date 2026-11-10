@@ -1,10 +1,8 @@
 name: X News Auto Poster
 
 on:
-  schedule:
-    # Her 3 saatte bir çalışır (UTC saatine göre)
-    - cron: '0 */3 * * *'
-  # GitHub arayüzünden istediğiniz zaman "Run workflow" butonuyla elle tetikleyebilirsiniz
+  # Otomatik cron kapatıldı (onaysız tweet atılmaması ve hata e-postalarını engellemek için)
+  # İstenirse GitHub arayüzünden "Run workflow" butonuyla elle çalıştırılabilir:
   workflow_dispatch:
     inputs:
       category:
