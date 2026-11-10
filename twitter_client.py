@@ -11,38 +11,21 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from twikit import Client
-from config import COOKIES_FILE
+from config import load_client_cookies
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-
-def ensure_cookies():
-    """Bulut (GitHub Actions) veya yerel ortamda cookies.json dosyasının varlığını kontrol eder."""
-    env_cookies = os.getenv("TWITTER_COOKIES")
-    if env_cookies and not COOKIES_FILE.exists():
-        logging.info("Ortam değişkeninden TWITTER_COOKIES okundu, cookies.json oluşturuluyor...")
-        with open(COOKIES_FILE, "w", encoding="utf-8") as f:
-            f.write(env_cookies.strip())
 
 
 async def async_post_tweet(tweet_text: str, attachment_url: str | None = None):
     """
     Twikit/twifork kullanarak oturum çerezleri üzerinden tweet veya alıntı tweet (Quote Tweet) paylaşır.
     """
-    ensure_cookies()
-
-    if not COOKIES_FILE.exists():
-        raise FileNotFoundError(
-            f"Oturum dosyası bulunamadı: {COOKIES_FILE}\n"
-            "Lütfen önce 'python login_helper.py' çalıştırarak çerezleri oluşturun."
-        )
-
     client = Client(language="tr-TR", impersonate="chrome124")
 
-    try:
-        logging.info("Oturum çerezleri yükleniyor...")
-        client.load_cookies(str(COOKIES_FILE))
+    # Çerezleri doğrudan yükle (bellekten veya yerel dosyadan)
+    load_client_cookies(client)
 
+    try:
         logging.info("Tweet paylaşılıyor...")
         logging.info(f"Tweet metni: {tweet_text}")
         if attachment_url:

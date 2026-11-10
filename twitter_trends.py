@@ -4,7 +4,7 @@ X (Twitter) Canlı Trendler, Kategori Bazlı Viral Tweetler ve Özel Hesap Takip
 import random
 import logging
 from twikit import Client
-from config import COOKIES_FILE, SPECIAL_ACCOUNTS, ensure_cookies
+from config import SPECIAL_ACCOUNTS, load_client_cookies
 from rss_fetcher import load_history
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -24,14 +24,8 @@ async def fetch_user_tweets(screen_name="turkce_dusun", limit=5):
     """
     Belirli bir X kullanıcısının son tweetlerini çeker.
     """
-    ensure_cookies()
-    if not COOKIES_FILE.exists():
-        raise FileNotFoundError(
-            "cookies.json bulunamadı! Lütfen Render ortamında TWITTER_COOKIES çevre değişkeninin tanımlı olduğundan emin olun."
-        )
-
     client = Client(language="tr-TR", impersonate="chrome124")
-    client.load_cookies(str(COOKIES_FILE))
+    load_client_cookies(client)
 
     history = set(load_history())
     candidates = []
@@ -76,14 +70,8 @@ async def fetch_viral_turkish_tweets(category=None, limit=15):
     Eğer 'category' belirtilmişse (spor, haber, mizah, tekno) o alandaki viralleri arar.
     Belirtilmemişse canlı Trend Topic (TT) listesini tarar.
     """
-    ensure_cookies()
-    if not COOKIES_FILE.exists():
-        raise FileNotFoundError(
-            "cookies.json bulunamadı! Lütfen Render ortamında TWITTER_COOKIES çevre değişkeninin tanımlı olduğundan emin olun."
-        )
-
     client = Client(language="tr-TR", impersonate="chrome124")
-    client.load_cookies(str(COOKIES_FILE))
+    load_client_cookies(client)
 
     history = set(load_history())
     candidates = []

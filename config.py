@@ -1,7 +1,8 @@
 """
-X News Curator - Yapılandırma ve Kaynak Listesi
+X News Curator - Yapılandırma ve Çerez Yönetimi
 """
 import os
+import json
 import logging
 from pathlib import Path
 
@@ -10,20 +11,36 @@ HISTORY_FILE = BASE_DIR / "history.json"
 COOKIES_FILE = BASE_DIR / "cookies.json"
 
 
-def ensure_cookies():
-    """Bulut (Render/GitHub) ortamında TWITTER_COOKIES değişkeninden cookies.json üretir."""
+def load_client_cookies(client):
+    """
+    Çerezleri hem bulutta (TWITTER_COOKIES ortam değişkeni) hem yerelde (cookies.json)
+    dosya bağımlılığı olmadan doğrudan belleğe yükler.
+    """
     env_cookies = os.getenv("TWITTER_COOKIES")
-    if env_cookies and not COOKIES_FILE.exists():
+    if env_cookies:
         try:
-            with open(COOKIES_FILE, "w", encoding="utf-8") as f:
-                f.write(env_cookies.strip())
-            logging.info(f"TWITTER_COOKIES ortam değişkeninden {COOKIES_FILE} başarıyla oluşturuldu.")
+            raw = env_cookies.strip()
+            # Eğer tırnaklarla sarmalanmışsa temizle
+            if (raw.startswith("'") and raw.endswith("'")) or (raw.startswith('"') and raw.endswith('"')):
+                raw = raw[1:-1]
+            data = json.loads(raw)
+            client.set_cookies(data)
+            logging.info("Çerezler TWITTER_COOKIES ortam değişkeninden başarıyla yüklendi.")
+            return True
         except Exception as e:
-            logging.error(f"cookies.json oluşturulamadı: {e}")
+            logging.error(f"TWITTER_COOKIES JSON ayrıştırma hatası: {e}")
 
+    # Ortam değişkeni yoksa yerel dosyadan dene
+    if COOKIES_FILE.exists():
+        client.load_cookies(str(COOKIES_FILE))
+        logging.info("Çerezler yerel cookies.json dosyasından yüklendi.")
+        return True
 
-# Modül yüklendiğinde otomatik olarak cookies.json dosyasını garantiye al
-ensure_cookies()
+    raise FileNotFoundError(
+        "X çerezleri bulunamadı! Lütfen Render panelinde Environment Variables altına "
+        "TWITTER_COOKIES değişkenini eklediğinizden emin olun."
+    )
+
 
 # Takip edilecek RSS kaynakları (Kategorilere ayrılmış)
 RSS_SOURCES = {
@@ -44,13 +61,13 @@ RSS_SOURCES = {
     ]
 }
 
-# Takip Edilecek Özel Hesaplar (Arkadaş / Kaliteli İçerik Üretenler)
+# Takip Edilecek Özel Hesaplar
 SPECIAL_ACCOUNTS = [
     "turkce_dusun"
 ]
 
-# Gemini Model Ayarları
-GEMINI_MODEL = "gemini-3.5-flash"
+# Varsayılan Gemini Modeli
+GEMINI_MODEL = "gemini-3.5-flash-lite"
 
 # Geçmişte paylaşılan kaç link saklansın
 MAX_HISTORY_ITEMS = 500
