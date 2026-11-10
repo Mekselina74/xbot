@@ -38,6 +38,29 @@ from ai_curator import select_and_craft_tweet, generate_viral_quote_comment
 from twitter_client import async_post_tweet
 from twitter_trends import fetch_viral_turkish_tweets, fetch_user_tweets
 
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK - X News Bot is Running!")
+
+    def log_message(self, format, *args):
+        pass  # Gereksiz HTTP loglarını gizle
+
+def start_health_check_server():
+    """Render.com gibi bulut sağlayıcılarının kapanmaması için basit HTTP sağlık portu dinler."""
+    port = int(os.getenv("PORT", 8080))
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+        t = threading.Thread(target=server.serve_forever, daemon=True)
+        t.start()
+        logging.info(f"Bulut sağlık kontrolü sunucusu port {port} üzerinde başlatıldı.")
+    except Exception as e:
+        logging.warning(f"Sağlık kontrolü sunucusu başlatılamadı (yerel ortam olabilir): {e}")
+
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -583,6 +606,9 @@ def main():
     # Zamanlayıcı (Her 3 saatte bir)
     if app.job_queue and ALLOWED_CHAT_ID:
         app.job_queue.run_repeating(scheduled_job, interval=10800, first=15)
+
+    # Render.com için HTTP sağlık kontrolü sunucusunu başlat
+    start_health_check_server()
 
     print(">>> Telegram Onay & Alintilama Botu Calisiyor! (Durdurmak icin CTRL+C)")
     app.run_polling()
