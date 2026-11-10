@@ -1,14 +1,41 @@
 """
 Gemini AI Haber Küratörü ve Tweet/Alıntı Yorum Üreticisi
+Çoklu Model Yedekleme (Fallback) ve Otomatik Yeniden Deneme Mekanizması
 """
 import os
 import json
 import logging
 from google import genai
 from google.genai import types
-from config import GEMINI_MODEL
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# Google sunucularında yoğunluk (503 UNAVAILABLE) olursa sırayla denenecek yedek modeller
+MODELS_TO_TRY = [
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-3.1-flash-lite"
+]
+
+
+def generate_with_fallback(client, prompt, config):
+    """Herhangi bir modelde geçici yoğunluk (503) olursa anında yedek modele geçer."""
+    last_error = None
+    for model_name in MODELS_TO_TRY:
+        try:
+            logging.info(f"Gemini modeli deneniyor: {model_name}")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=config
+            )
+            return response
+        except Exception as e:
+            logging.warning(f"Model {model_name} geçici hata verdi ({e}). Yedek modele geçiliyor...")
+            last_error = e
+
+    raise last_error
 
 
 def select_and_craft_tweet(candidates, preferred_category=None):
@@ -55,15 +82,13 @@ JSON Formatı:
 }}
 """
 
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            response_mime_type="application/json",
-            temperature=0.7,
-        )
+    config = types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        response_mime_type="application/json",
+        temperature=0.7,
     )
+
+    response = generate_with_fallback(client, prompt, config)
 
     result = json.loads(response.text.strip())
     selected_index = result.get("selected_index", 0)
@@ -113,15 +138,13 @@ JSON Formatı:
 }}
 """
 
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            response_mime_type="application/json",
-            temperature=0.8,
-        )
+    config = types.GenerateContentConfig(
+        system_instruction=system_instruction,
+        response_mime_type="application/json",
+        temperature=0.8,
     )
+
+    response = generate_with_fallback(client, prompt, config)
 
     result = json.loads(response.text.strip())
     return {

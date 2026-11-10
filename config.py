@@ -2,11 +2,28 @@
 X News Curator - Yapılandırma ve Kaynak Listesi
 """
 import os
+import logging
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 HISTORY_FILE = BASE_DIR / "history.json"
 COOKIES_FILE = BASE_DIR / "cookies.json"
+
+
+def ensure_cookies():
+    """Bulut (Render/GitHub) ortamında TWITTER_COOKIES değişkeninden cookies.json üretir."""
+    env_cookies = os.getenv("TWITTER_COOKIES")
+    if env_cookies and not COOKIES_FILE.exists():
+        try:
+            with open(COOKIES_FILE, "w", encoding="utf-8") as f:
+                f.write(env_cookies.strip())
+            logging.info(f"TWITTER_COOKIES ortam değişkeninden {COOKIES_FILE} başarıyla oluşturuldu.")
+        except Exception as e:
+            logging.error(f"cookies.json oluşturulamadı: {e}")
+
+
+# Modül yüklendiğinde otomatik olarak cookies.json dosyasını garantiye al
+ensure_cookies()
 
 # Takip edilecek RSS kaynakları (Kategorilere ayrılmış)
 RSS_SOURCES = {
@@ -33,7 +50,7 @@ SPECIAL_ACCOUNTS = [
 ]
 
 # Gemini Model Ayarları
-GEMINI_MODEL = "gemini-3.1-flash-lite"
+GEMINI_MODEL = "gemini-3.5-flash"
 
 # Geçmişte paylaşılan kaç link saklansın
 MAX_HISTORY_ITEMS = 500
